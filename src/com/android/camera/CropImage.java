@@ -20,7 +20,6 @@ import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.ArrayList;
-import java.util.concurrent.CountDownLatch;
 
 import android.app.WallpaperManager;
 import android.content.ContentResolver;
@@ -86,9 +85,13 @@ public class CropImage extends MonitoredActivity {
     private IImageList mAllImages;
     private IImage mImage;
 
+	private int rotationAngle;
+    
+
     @Override
     public void onCreate(Bundle icicle) {
         super.onCreate(icicle);
+        
         mContentResolver = getContentResolver();
 
         requestWindowFeature(Window.FEATURE_NO_TITLE);
@@ -96,7 +99,7 @@ public class CropImage extends MonitoredActivity {
 
         mImageView = (CropImageView) findViewById(R.id.image);
 
-        MenuHelper.showStorageToast(this);
+//        MenuHelper.showStorageToast(this);
 
         Intent intent = getIntent();
         Bundle extras = intent.getExtras();
@@ -127,6 +130,7 @@ public class CropImage extends MonitoredActivity {
             mDoFaceDetection = extras.containsKey("noFaceDetection")
                     ? !extras.getBoolean("noFaceDetection")
                     : true;
+           rotationAngle = extras.getInt("rotation_angle", 0);
         }
 
         if (mBitmap == null) {
@@ -139,7 +143,15 @@ public class CropImage extends MonitoredActivity {
                 // instead.
                 // TODO when saving the resulting bitmap use the
                 // decode/crop/encode api so we don't lose any resolution.
+            	
+            	//**********Ovaj rotate as needed se ne koristi ************
                 mBitmap = mImage.thumbBitmap(IImage.ROTATE_AS_NEEDED);
+                if (rotationAngle != 0){
+                	Matrix m = new Matrix();
+                	m.postRotate(rotationAngle);
+                	
+                	mBitmap = Bitmap.createBitmap(mBitmap, 0, 0, mBitmap.getWidth(), mBitmap.getHeight(), m, true);
+                }
             }
         }
 
@@ -174,35 +186,41 @@ public class CropImage extends MonitoredActivity {
             return;
         }
 
-        mImageView.setImageBitmapResetBase(mBitmap, true);
+        //TODO: JA, pobrisi ovo $#"&%$/$%&/&$%(&%(%&/()%&(%$/#$&"$%&#$%#$"&%$%"&#$%&
+        int x = mBitmap.getWidth();
+        int y = mBitmap.getHeight();
+        		
+        
+//        mImageView.setImageBitmapResetBase(mBitmap, true);
+        mImageView.setImageBitmap(mBitmap);
 
         Util.startBackgroundJob(this, null,
                 getResources().getString(R.string.runningFaceDetection),
                 new Runnable() {
             public void run() {
-                final CountDownLatch latch = new CountDownLatch(1);
-                final Bitmap b = (mImage != null)
-                        ? mImage.fullSizeBitmap(IImage.UNCONSTRAINED,
-                        1024 * 1024)
-                        : mBitmap;
-                mHandler.post(new Runnable() {
-                    public void run() {
-                        if (b != mBitmap && b != null) {
-                            mImageView.setImageBitmapResetBase(b, true);
-                            mBitmap.recycle();
-                            mBitmap = b;
-                        }
-                        if (mImageView.getScale() == 1F) {
-                            mImageView.center(true, true);
-                        }
-                        latch.countDown();
-                    }
-                });
-                try {
-                    latch.await();
-                } catch (InterruptedException e) {
-                    throw new RuntimeException(e);
-                }
+//                final CountDownLatch latch = new CountDownLatch(1);
+//                final Bitmap b = (mImage != null)
+//                        ? mImage.fullSizeBitmap(IImage.UNCONSTRAINED,
+//                        1024 * 1024)
+//                        : mBitmap;
+//                mHandler.post(new Runnable() {
+//                    public void run() {
+//                        if (b != mBitmap && b != null) {
+//                            mImageView.setImageBitmapResetBase(b, true);
+//                            mBitmap.recycle();
+//                            mBitmap = b;
+//                        }
+//                        if (mImageView.getScale() == 1F) {
+//                            mImageView.center(true, true);
+//                        }
+//                        latch.countDown();
+//                    }
+//                });
+//                try {
+//                    latch.await();
+//                } catch (InterruptedException e) {
+//                    throw new RuntimeException(e);
+//                }
                 mRunFaceDetection.run();
             }
         }, mHandler);
@@ -559,6 +577,7 @@ class CropImageView extends ImageViewTouchBase {
     HighlightView mMotionHighlightView = null;
     float mLastX, mLastY;
     int mMotionEdge;
+	private CropImage context;
 
     @Override
     protected void onLayout(boolean changed, int left, int top,
@@ -569,7 +588,7 @@ class CropImageView extends ImageViewTouchBase {
                 hv.mMatrix.set(getImageMatrix());
                 hv.invalidate();
                 if (hv.mIsFocused) {
-                    centerBasedOnHighlightView(hv);
+//                    centerBasedOnHighlightView(hv);
                 }
             }
         }
@@ -641,7 +660,7 @@ class CropImageView extends ImageViewTouchBase {
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        CropImage cropImage = (CropImage) mContext;
+        CropImage cropImage = (CropImage) this.getContext();
         if (cropImage.mSaving) {
             return false;
         }
@@ -680,13 +699,13 @@ class CropImageView extends ImageViewTouchBase {
                                 }
                                 mHighlightViews.get(j).setHidden(true);
                             }
-                            centerBasedOnHighlightView(hv);
-                            ((CropImage) mContext).mWaitingToPick = false;
+//                            centerBasedOnHighlightView(hv);
+                            ((CropImage) this.getContext()).mWaitingToPick = false;
                             return true;
                         }
                     }
                 } else if (mMotionHighlightView != null) {
-                    centerBasedOnHighlightView(mMotionHighlightView);
+//                    centerBasedOnHighlightView(mMotionHighlightView);
                     mMotionHighlightView.setMode(
                             HighlightView.ModifyMode.None);
                 }
@@ -732,15 +751,27 @@ class CropImageView extends ImageViewTouchBase {
         return true;
     }
 
+    
     // Pan the displayed image to make sure the cropping rectangle is visible.
+    
+    /**
+     * Ovo bi trebalo otici Crop activity official i pogledati kako radi sa ovim mLastX itd. Ja sam tu nesto brzinski probao sklepat jer 
+     * projekt se crvenio ovdje ali na kraju sam odlucio da jednostavno zoomanje i pananje nam nije trebalo pa sam ovo zanemario.
+     * 
+     * Znaci NE KORISTITI - U suprotnom, pozabaviti se malo s tim i napraviti izmjene da radi ispravno i da ne divlja "pan" kada se promijeni zoom level 
+     * 
+     * @see #centerBasedOnHighlightView(HighlightView) za vise info
+     * 
+     * @param hv
+     */
     private void ensureVisible(HighlightView hv) {
         Rect r = hv.mDrawRect;
 
-        int panDeltaX1 = Math.max(0, mLeft - r.left);
-        int panDeltaX2 = Math.min(0, mRight - r.right);
+        int panDeltaX1 = (int) Math.max(0, this.mLastX - r.left);
+        int panDeltaX2 = (int) Math.min(0, this.mLastX + this.mThisWidth - r.right);
 
-        int panDeltaY1 = Math.max(0, mTop - r.top);
-        int panDeltaY2 = Math.min(0, mBottom - r.bottom);
+        int panDeltaY1 = (int) Math.max(0, this.mLastY - r.top);
+        int panDeltaY2 = (int) Math.min(0, this.mLastY + this.mThisHeight - r.bottom);
 
         int panDeltaX = panDeltaX1 != 0 ? panDeltaX1 : panDeltaX2;
         int panDeltaY = panDeltaY1 != 0 ? panDeltaY1 : panDeltaY2;
@@ -752,6 +783,11 @@ class CropImageView extends ImageViewTouchBase {
 
     // If the cropping rectangle's size changed significantly, change the
     // view's center and scale according to the cropping rectangle.
+    
+    /**
+     * Ne koristi se jer je "pan" @see #ensureVisible(HighlightView) stvarao probleme zato jer dio koda se crvenio kada sam importao projekt.  
+     * @param hv
+     */
     private void centerBasedOnHighlightView(HighlightView hv) {
         Rect drawRect = hv.mDrawRect;
 
